@@ -3,11 +3,15 @@ import time
 import streamlit as st
 from langchain_openai import ChatOpenAI
 from langchain_openai import OpenAIEmbeddings
+from langchain_groq import ChatGroq
 from pdfchatapp.main import PdfChatApp, clear_folder
 from streamlit_chat import message
+from dotenv import load_dotenv
+load_dotenv()
 pdf_folder = "Data"
-
-
+response_time = 0
+clicked_button_name = None
+temp_update = False
 # st.set_page_config("Chat PDF")
 # Main page content
 st.header("Chat with PDF")
@@ -16,18 +20,30 @@ rag_pipeline_container = st.container()
 response_container = st.container()
 input_container = st.container()
 
+def initialise_llms(temprature=0,llm_name= "OpenAI"):
+    if llm_name == "OpenAI":
+        return ChatOpenAI(temperature=temprature, verbose=True),OpenAIEmbeddings()
+    elif llm_name == "Gemini":
+        return ChatGroq(temperature=temprature,model_name="gemma2-9b-it"),OpenAIEmbeddings() 
+    elif llm_name == "Gemma":
+        return ChatGroq(temperature=temprature,model_name="gemma2-9b-it"),OpenAIEmbeddings() 
+    elif llm_name == "Llama":
+        return ChatGroq(temperature=temprature,model_name="Llama3-8b-8192"),OpenAIEmbeddings()
 
 
 if (
     "user_prompt_history" not in st.session_state
     and "chat_answers_history" not in st.session_state
     and "chat_history" not in st.session_state
-    and "app" not in st.session_state):
+    and "app" not in st.session_state
+    and "llm_name" not in st.session_state
+    ):
     
     st.session_state["user_prompt_history"] = []
     st.session_state["chat_answers_history"] = []
     st.session_state["chat_history"] = []
     st.session_state["app"] = None
+    st.session_state["llm_name"] = None
 def on_btn_click():
     st.session_state["user_prompt_history"] = []
     st.session_state["chat_answers_history"] = []
@@ -62,7 +78,8 @@ with sidebar_container:
             step=0.1        # Step size
         )
         st.write(f"Selected value: {slider_value}")
-
+        if slider_value != 0:
+            temp_update = True
     # Add another horizontal line for separation
     st.sidebar.markdown("---")
 
@@ -71,35 +88,36 @@ with sidebar_container:
 
 with rag_pipeline_container:
     # Row 1: Three equal-width buttons
-    col1, col2, col3 = st.columns([0.33,0.33,0.33])  # Create three equal columns
+    col1, col2, col3,col4 = st.columns([0.25,0.25,0.25,0.25])  # Create three equal columns
 
     # Initialize an empty container to display the clicked button name
     button_placeholder = st.empty()
-    clicked_button_name = None
+    
 
     with col1:
         if st.button("OpenAI",use_container_width  = True):
-            clicked_button_name = "OpenAI"
-            
-            # Create instance of OpenAI LLM
-            llm = ChatOpenAI(temperature=slider_value, verbose=True)
-            embeddings = OpenAIEmbeddings()
-            
+            st.session_state["llm_name"]  = "OpenAI"
     with col2:
         if st.button("Gemini",use_container_width  = True):
-            clicked_button_name = "Gemini"
-            # Create instance of OpenAI LLM
-            llm = None
-            embeddings = None
+            st.session_state["llm_name"]  = "Gemini"
+            st.success("Yet to integrate Gemini model. Currently using Gemma Model")        
     with col3:
+        if st.button("Gemma",use_container_width  = True):
+            st.session_state["llm_name"]  = "Gemma"
+    with col4:
         if st.button("Llama",use_container_width  = True):
-            clicked_button_name = "Llama"
-            # Create instance of OpenAI LLM
-            llm = None
-            embeddings = None
+            st.session_state["llm_name"]  = "Llama"
             
-    st.write(f"Selected LLM: {clicked_button_name}")
-    if clicked_button_name:  
+    
+    if temp_update or st.session_state["llm_name"]: 
+        if st.session_state.get("llm_name", None) is None:
+            st.session_state["llm_name"]  = "OpenAI"
+        llm, embeddings  = initialise_llms(temprature=slider_value,llm_name=st.session_state.get("llm_name", None))
+        st.write(f"Selected LLM: {st.session_state.get("llm_name", None)}")
+        st.write(f"Model temprature: {slider_value}")
+        st.write(f"Model Version: {llm.model_name}")
+        st.write(f"Embedding version: {embeddings.model}")
+        start_time=time.process_time()
         with st.spinner("Building RAG Database..."):
             vectorstore_dir = "vectordb"
             if not os.path.exists(vectorstore_dir):
@@ -114,10 +132,11 @@ with rag_pipeline_container:
                 ) 
                 _ = st.session_state["app"].create_vectordb()
                 # st.session_state["retrival_chain"] = pdfchatapp.get_conversational_chain()   
-                st.success("Succesfully Setup the RAG Pipeline")
+                st.success("Succesfully Setup the RAG Pipeline.")
             else:
                 print("Pass") 
-                
+        st.write(f"Time Taken : {round(time.process_time()-start_time,2)} seconds") 
+        temp_update = False       
                
                                
 with input_container:
@@ -127,7 +146,7 @@ with input_container:
         user_message = st.text_input(label= "Enter your message",label_visibility = "collapsed",placeholder="Type your message here...")   
     with col2:
         submit_button = st.button("Send",use_container_width  = True)
-    if submit_button and user_message:
+    if submit_button or user_message:
         start=time.process_time()
         generated_response= st.session_state["app"].get_llm_response(
             query = user_message ,chat_history = st.session_state["chat_history"])
@@ -147,5 +166,5 @@ if st.session_state["chat_answers_history"]:
             # print(generated_response, user_query)
             message(user_query, is_user=True, key=f"{count}_user")
             message(generated_response,key=f"{count}") 
-        st.write(f"Response time : {response_time}")    
+        st.write(f"Response time : {round(response_time,2)} seconds")   
         st.button("Clear message", on_click=on_btn_click)    

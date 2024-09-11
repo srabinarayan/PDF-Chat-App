@@ -1,7 +1,7 @@
 import os
 import shutil
-from dotenv import load_dotenv
-load_dotenv()
+# from dotenv import load_dotenv
+# load_dotenv()
 
 from langchain_community.document_loaders import PyPDFLoader,PyPDFDirectoryLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -28,7 +28,7 @@ class PdfChatApp():
         # Create and load PDF Loader
         loader = PyPDFDirectoryLoader(file_path)
         raw_documents = loader.load()
-        print(f"Loaded {len(raw_documents)} documents")
+        # print(f"Loaded {len(raw_documents)} documents")
         # Split Text from pdf 
         text_splitter = RecursiveCharacterTextSplitter(chunk_size = 600,chunk_overlap = 50)
         documents = text_splitter.split_documents(raw_documents)
