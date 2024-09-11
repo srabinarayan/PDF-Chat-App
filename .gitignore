@@ -3,3 +3,4 @@ Data
 vectordb
 .env
 venv
+pdfchatapp.egg-info
